@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import os
 import sys
+from typing import Any
 
 from dotenv import load_dotenv
 from mcp.server.fastmcp import FastMCP
@@ -29,6 +30,9 @@ def create_server() -> FastMCP:
     """Create and configure the MCP server with all tools."""
     load_dotenv()
 
+    transport = os.getenv("MCP_TRANSPORT", "stdio")
+    port = int(os.getenv("MCP_PORT", "3100"))
+
     log_level = os.getenv("LOG_LEVEL", "info").upper()
     logging.basicConfig(
         level=getattr(logging, log_level, logging.INFO),
@@ -36,7 +40,12 @@ def create_server() -> FastMCP:
         stream=sys.stderr,
     )
 
-    mcp = FastMCP("polymarket-mcp")
+    mcp_kwargs: dict[str, Any] = {"name": "polymarket-mcp"}
+    if transport == "sse":
+        mcp_kwargs["host"] = "0.0.0.0"
+        mcp_kwargs["port"] = port
+
+    mcp = FastMCP(**mcp_kwargs)
 
     demo = is_demo_mode()
     safety_config = load_safety_config()
@@ -72,15 +81,14 @@ def create_server() -> FastMCP:
 
 def main() -> None:
     """Entry point for the MCP server."""
-    server = create_server()
+    load_dotenv()
     transport = os.getenv("MCP_TRANSPORT", "stdio")
+    server = create_server()
 
-    if transport == "stdio":
-        server.run(transport="stdio")
-    elif transport == "sse":
-        port = int(os.getenv("MCP_PORT", "3100"))
-        logger.info("Starting SSE transport on port %d", port)
-        server.run(transport="sse", host="0.0.0.0", port=port)
+    if transport in ("stdio", "sse"):
+        if transport == "sse":
+            logger.info("Starting SSE transport on port %s", os.getenv("MCP_PORT", "3100"))
+        server.run(transport=transport)
     else:
         logger.error("Unknown MCP_TRANSPORT=%s (use 'stdio' or 'sse')", transport)
         sys.exit(1)
