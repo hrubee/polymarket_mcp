@@ -42,7 +42,7 @@ def create_server() -> FastMCP:
 
     mcp_kwargs: dict[str, Any] = {"name": "polymarket-mcp"}
     if transport == "sse":
-        mcp_kwargs["host"] = "0.0.0.0"
+        mcp_kwargs["host"] = os.getenv("MCP_HOST", "127.0.0.1")
         mcp_kwargs["port"] = port
 
     mcp = FastMCP(**mcp_kwargs)
