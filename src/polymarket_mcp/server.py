@@ -7,8 +7,7 @@ import os
 import sys
 
 from dotenv import load_dotenv
-from mcp.server import Server
-from mcp.server.stdio import stdio_server
+from mcp.server.fastmcp import FastMCP
 
 from . import __version__
 from .auth import (
@@ -26,7 +25,7 @@ logger = logging.getLogger(__name__)
 VERSION = __version__
 
 
-def create_server() -> Server:
+def create_server() -> FastMCP:
     """Create and configure the MCP server with all tools."""
     load_dotenv()
 
@@ -37,7 +36,7 @@ def create_server() -> Server:
         stream=sys.stderr,
     )
 
-    mcp = Server("polymarket-mcp")
+    mcp = FastMCP("polymarket-mcp")
 
     demo = is_demo_mode()
     safety_config = load_safety_config()
@@ -71,43 +70,17 @@ def create_server() -> Server:
     return mcp
 
 
-async def run_stdio(server: Server) -> None:
-    """Run the server using stdio transport."""
-    async with stdio_server() as (read_stream, write_stream):
-        await server.run(read_stream, write_stream, server.create_initialization_options())
-
-
 def main() -> None:
     """Entry point for the MCP server."""
-    import asyncio
-
     server = create_server()
     transport = os.getenv("MCP_TRANSPORT", "stdio")
 
     if transport == "stdio":
-        asyncio.run(run_stdio(server))
+        server.run(transport="stdio")
     elif transport == "sse":
-        import uvicorn
-        from mcp.server.sse import SseServerTransport
-        from starlette.applications import Starlette
-        from starlette.routing import Route
-
-        sse = SseServerTransport("/messages")
-
-        async def handle_sse(request):
-            async with sse.connect_sse(request.scope, request.receive, request._send) as streams:
-                await server.run(streams[0], streams[1], server.create_initialization_options())
-
-        app = Starlette(
-            routes=[
-                Route("/sse", endpoint=handle_sse),
-                Route("/messages", endpoint=sse.handle_post_message, methods=["POST"]),
-            ]
-        )
-
         port = int(os.getenv("MCP_PORT", "3100"))
         logger.info("Starting SSE transport on port %d", port)
-        uvicorn.run(app, host="0.0.0.0", port=port)
+        server.run(transport="sse", host="0.0.0.0", port=port)
     else:
         logger.error("Unknown MCP_TRANSPORT=%s (use 'stdio' or 'sse')", transport)
         sys.exit(1)
